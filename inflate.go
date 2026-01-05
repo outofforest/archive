@@ -59,13 +59,16 @@ func InflateTar(reader io.Reader, path string) (retErr error) {
 			return nil
 		case err != nil:
 			return errors.WithStack(err)
-		case header == nil || header.Name == "pax_global_header" || header.Name == "":
+		case header == nil || header.Name == "pax_global_header":
 			continue
 		}
 
 		header.Name, err = ensureFileInDir(tmpPath, header.Name)
 		if err != nil {
 			return err
+		}
+		if header.Name == "" {
+			continue
 		}
 
 		// We take mode from header.FileInfo().Mode(), not from header.Mode because they may be in
@@ -213,6 +216,9 @@ func InflateZip(reader io.Reader, path string) (retErr error) {
 		dst, err := ensureFileInDir(tmpPath, zf.Name)
 		if err != nil {
 			return err
+		}
+		if dst == "" {
+			continue
 		}
 
 		mode := zf.FileInfo().Mode()

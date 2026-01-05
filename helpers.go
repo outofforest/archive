@@ -26,6 +26,12 @@ func ensureDir(dir string) (string, error) {
 
 func ensureFileInDir(dir, file string) (string, error) {
 	file = filepath.Join(dir, file)
+
+	// It happened in tar archive that it contained ./ entry.
+	if file == dir {
+		return "", nil
+	}
+
 	rel, err := filepath.Rel(dir, file)
 	if err != nil {
 		return "", errors.WithStack(err)
