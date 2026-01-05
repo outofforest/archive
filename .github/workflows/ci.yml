@@ -1,7 +1,7 @@
 name: ci
 on:
   pull_request:
-    branches: [ "v[0-9]+" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
