@@ -2,6 +2,7 @@ package archive
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"hash"
 	"io"
 	"strings"
@@ -9,11 +10,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Hasher returns hash implementation, reader and checksum based on identifier in checksum.
-func Hasher(checksum string, reader io.Reader) (hash.Hash, io.Reader, string, error) {
+var _ io.Reader = &HashingReader{}
+
+// HashingReader reads stream, computes and verifies checksum.
+type HashingReader struct {
+	reader   io.Reader
+	hasher   hash.Hash
+	checksum string
+}
+
+// NewHashingReader creates new hashing reader.
+func NewHashingReader(reader io.Reader, checksum string) (*HashingReader, error) {
 	parts := strings.SplitN(checksum, ":", 2)
 	if len(parts) != 2 {
-		return nil, nil, "", errors.Errorf("incorrect checksum format: %s", checksum)
+		return nil, errors.Errorf("incorrect checksum format: %s", checksum)
 	}
 	hashAlgorithm := parts[0]
 	checksum = parts[1]
@@ -23,8 +33,33 @@ func Hasher(checksum string, reader io.Reader) (hash.Hash, io.Reader, string, er
 	case "sha256":
 		hasher = sha256.New()
 	default:
-		return nil, nil, "", errors.Errorf("unsupported hashing algorithm: %s", hashAlgorithm)
+		return nil, errors.Errorf("unsupported hashing algorithm: %s", hashAlgorithm)
 	}
 
-	return hasher, io.TeeReader(reader, hasher), strings.ToLower(checksum), nil
+	return &HashingReader{
+		reader:   io.TeeReader(reader, hasher),
+		hasher:   hasher,
+		checksum: checksum,
+	}, nil
+}
+
+// Reader reads bytes from stream.
+func (hr *HashingReader) Read(p []byte) (int, error) {
+	n, err := hr.reader.Read(p)
+	return n, errors.WithStack(err)
+}
+
+// ValidateChecksum validates checksum.
+// Before validating it reads all the remaining bytes from stream to ensure that checksum is computed
+// from all bytes.
+func (hr *HashingReader) ValidateChecksum() error {
+	if _, err := io.ReadAll(hr.reader); err != nil {
+		return errors.WithStack(err)
+	}
+
+	checksum := hex.EncodeToString(hr.hasher.Sum(nil))
+	if checksum != hr.checksum {
+		return errors.Errorf("checksum mismatch, expected: %q, got: %q", hr.checksum, checksum)
+	}
+	return nil
 }
