@@ -43,7 +43,7 @@ func NewHashingReader(reader io.Reader, checksum string) (*HashingReader, error)
 	}, nil
 }
 
-// Reader reads bytes from stream.
+// Read reads bytes from stream.
 func (hr *HashingReader) Read(p []byte) (int, error) {
 	n, err := hr.reader.Read(p)
 	return n, errors.WithStack(err)
