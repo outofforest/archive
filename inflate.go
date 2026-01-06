@@ -50,9 +50,6 @@ func InflateTar(reader io.Reader, path string) (retErr error) {
 		header, err := tr.Next()
 		switch {
 		case errors.Is(err, io.EOF):
-			if err := drain(reader); err != nil {
-				return err
-			}
 			if err := os.Rename(tmpPath, path); err != nil {
 				return err
 			}
@@ -134,10 +131,7 @@ func InflateTarGz(reader io.Reader, path string) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if err := InflateTar(reader2, path); err != nil {
-		return err
-	}
-	return drain(reader)
+	return InflateTar(reader2, path)
 }
 
 // InflateTarXz inflates tar.xz archive.
@@ -146,10 +140,7 @@ func InflateTarXz(reader io.Reader, path string) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if err := InflateTar(reader2, path); err != nil {
-		return err
-	}
-	return drain(reader)
+	return InflateTar(reader2, path)
 }
 
 // InflateZip inflates zip archive.
@@ -247,12 +238,4 @@ func InflateZip(reader io.Reader, path string) (retErr error) {
 	}
 
 	return errors.WithStack(os.Rename(tmpPath, path))
-}
-
-// drain is used to read all remaining bytes from the reader.
-// We found that tar.xz library archive doesn't necessarily read all the bytes.
-// We fix it here so the hasher computes correct hash.
-func drain(reader io.Reader) error {
-	_, err := io.ReadAll(reader)
-	return errors.WithStack(err)
 }
