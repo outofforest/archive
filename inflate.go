@@ -33,14 +33,13 @@ func Inflate(name string, reader io.Reader, path string) error {
 
 // InflateTar inflates tar archive.
 func InflateTar(reader io.Reader, path string) (retErr error) {
-	tmpPath := path + ".tmp"
-	tmpPath, err := ensureDir(tmpPath)
+	tmpPath, err := tmpDir(path)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && tmpPath != path {
 			_ = os.RemoveAll(tmpPath)
 		}
 	}()
@@ -50,10 +49,10 @@ func InflateTar(reader io.Reader, path string) (retErr error) {
 		header, err := tr.Next()
 		switch {
 		case errors.Is(err, io.EOF):
-			if err := os.Rename(tmpPath, path); err != nil {
-				return err
+			if tmpPath == path {
+				return nil
 			}
-			return nil
+			return errors.WithStack(os.Rename(tmpPath, path))
 		case err != nil:
 			return errors.WithStack(err)
 		case header == nil || header.Name == "pax_global_header":
@@ -100,7 +99,13 @@ func InflateTar(reader io.Reader, path string) (retErr error) {
 				return errors.WithStack(err)
 			}
 		case tar.TypeLink:
-			header.Linkname = path + "/" + header.Linkname
+			header.Linkname, err = ensureFileInDir(tmpPath, header.Linkname)
+			if err != nil {
+				return err
+			}
+			if header.Linkname == "" {
+				continue
+			}
 			if err := ensureFileDir(header.Name); err != nil {
 				return err
 			}
@@ -145,14 +150,13 @@ func InflateTarXz(reader io.Reader, path string) error {
 
 // InflateZip inflates zip archive.
 func InflateZip(reader io.Reader, path string) (retErr error) {
-	tmpPath := path + ".tmp"
-	tmpPath, err := ensureDir(tmpPath)
+	tmpPath, err := tmpDir(path)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && tmpPath != path {
 			_ = os.RemoveAll(tmpPath)
 		}
 	}()
@@ -237,5 +241,30 @@ func InflateZip(reader io.Reader, path string) (retErr error) {
 		}
 	}
 
+	if tmpPath == path {
+		return nil
+	}
+
 	return errors.WithStack(os.Rename(tmpPath, path))
+}
+
+func tmpDir(path string) (string, error) {
+	tmpPath := path
+	info, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return "", errors.WithStack(err)
+	}
+	if err == nil && !info.IsDir() {
+		return "", errors.Errorf("%s is not a directory", path)
+	}
+	if err != nil {
+		tmpPath = path + ".tmp"
+		var err error
+		tmpPath, err = ensureDir(tmpPath)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return tmpPath, nil
 }
