@@ -46,14 +46,22 @@ func NewHashingReader(reader io.Reader, checksum string) (*HashingReader, error)
 // Read reads bytes from stream.
 func (hr *HashingReader) Read(p []byte) (int, error) {
 	n, err := hr.reader.Read(p)
-	return n, errors.WithStack(err)
+
+	switch {
+	case err == nil:
+		return n, nil
+	case errors.Is(err, io.EOF):
+		return n, io.EOF
+	default:
+		return 0, errors.WithStack(err)
+	}
 }
 
 // ValidateChecksum validates checksum.
 // Before validating it reads all the remaining bytes from stream to ensure that checksum is computed
 // from all bytes.
 func (hr *HashingReader) ValidateChecksum() error {
-	if _, err := io.ReadAll(hr.reader); err != nil {
+	if _, err := io.Copy(io.Discard, hr.reader); err != nil {
 		return errors.WithStack(err)
 	}
 
